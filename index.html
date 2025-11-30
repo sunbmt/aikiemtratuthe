@@ -114,8 +114,9 @@
         async function loop() {
             if (isCamRunning) {
                  if (timestamp - lastPredictTime >= 2000) {
-            lastPredictTime = timestamp;
-            await predict(webcam.canvas);
+                        lastPredictTime = timestamp;
+                         webcam.update();
+                        await predict(webcam.canvas);
         }
                 window.requestAnimationFrame(loop);
             }
@@ -196,3 +197,4 @@
 </body>
 
 </html>
+
