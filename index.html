@@ -69,6 +69,7 @@
 
     <script>
         const URL_MODEL = "./my_model/"; 
+        let lastPredictTime = 0;
         let model, webcam, ctx, maxPredictions;
         let isCamRunning = false;
         let facingMode = "user"; 
@@ -112,8 +113,10 @@
 
         async function loop() {
             if (isCamRunning) {
-                webcam.update();
-                await predict(webcam.canvas);
+                 if (timestamp - lastPredictTime >= 2000) {
+            lastPredictTime = timestamp;
+            await predict(webcam.canvas);
+        }
                 window.requestAnimationFrame(loop);
             }
         }
@@ -191,4 +194,5 @@
         }
     </script>
 </body>
+
 </html>
