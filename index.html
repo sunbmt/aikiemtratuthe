@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pose Classifier</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* CSS giao diện */
+        body{font-family:'Segoe UI',sans-serif;background:#f0f4f8;margin:0;display:flex;flex-direction:column;min-height:100vh;color:#333}
+        header{background:#fff;padding:15px 30px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 4px rgba(0,0,0,.1)}
+        .logo{color:#3b82f6;font-weight:700;font-size:1.4rem;display:flex;gap:10px}
+        /* Nav Menu Styles */
+        nav a{text-decoration:none;color:#666;margin-left:20px;transition:0.3s} nav a:hover,nav a.active{color:#3b82f6;font-weight:700}
+        
+        main{flex:1;display:flex;flex-direction:column;align-items:center;padding:30px 15px}
+        .card{background:#fff;border-radius:16px;padding:30px;width:100%;max-width:600px;box-shadow:0 8px 20px rgba(0,0,0,.08);text-align:center}
+        h1{color:#3b82f6;margin:0 0 20px;font-size:1.8rem}
+        .view-container{width:100%;max-width:500px;aspect-ratio:1/1;background:#000;border-radius:12px;margin:0 auto 25px;position:relative;overflow:hidden;display:flex;justify-content:center;align-items:center;color:#888}
+        canvas{width:100%;height:100%;object-fit:contain;display:none}
+        #holder i{font-size:4rem;margin-bottom:15px} #holder p{font-size:1.1rem;margin:0}
+        .btns{display:flex;gap:10px;justify-content:center;margin-bottom:20px}
+        button{padding:10px 20px;border:none;border-radius:8px;cursor:pointer;color:#fff;font-size:1rem;font-weight:600;display:flex;align-items:center;gap:8px}
+        .btn-g{background:#10b981}.btn-gy{background:#6b7280}.btn-r{background:#ef4444}.btn-o{background:#f59e0b}
+        #label-container{width:100%;text-align:left}
+        .res{background:#f8fafc;padding:12px;margin-bottom:8px;border-radius:6px;border-left:5px solid #3b82f6;display:flex;justify-content:space-between;font-size:1rem}
+        footer{font-size:.9rem;color:#888;text-align:center;padding:20px;background:#fff;margin-top:auto}
+        #loader{display:none;position:absolute;color:#fff}
+    </style>
+</head>
+<body>
+    <header>
+        <div class="logo"><i class="fa-solid fa-person-rays"></i> Pose Classifier</div>
+        <nav>
+            <a href="index.html" class="active">Trang Chủ</a>
+            <a href="about.html">Giới Thiệu</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="card">
+            <h1>Nhận Diện Tư Thế</h1>
+            
+            <div class="view-container">
+                <div id="holder">
+                    <i class="fa-solid fa-camera"></i>
+                    <p>Sẵn sàng</p>
+                </div>
+                <canvas id="canvas"></canvas>
+                <div id="loader"><i class="fa-solid fa-spinner fa-spin"></i></div>
+            </div>
+
+            <div class="btns">
+                <input type="file" id="up" hidden accept="image/*" onchange="handleImage(this)">
+                <button class="btn-g" onclick="document.getElementById('up').click()"><i class="fa-solid fa-image"></i> Tải ảnh</button>
+                <button id="b-start" class="btn-gy" onclick="initWebcam()"><i class="fa-solid fa-video"></i> Mở camera</button>
+                <button id="b-stop" class="btn-r" style="display:none" onclick="stopWebcam()"><i class="fa-solid fa-stop"></i> Dừng camera</button>
+                <button id="b-sw" class="btn-o" style="display:none" onclick="switchCamera()"><i class="fa-solid fa-rotate"></i> Đổi camera</button>
+            </div>
+            
+            <div id="label-container"></div>
+        </div>
+    </main>
+
+    <footer>&copy; 2025 Dự án AI Giám Sát Tư Thế. Thực hiện bởi Lê Hưng và Lê Dũng.</footer>
+    <!-- Thư viện AI-->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/pose@0.8/dist/teachablemachine-pose.min.js"></script>
+
+    <script>
+        const URL_MODEL = "./my_model/"; 
+        let model, webcam, ctx, maxPredictions;
+        let isCamRunning = false;
+        let facingMode = "user"; 
+        
+        const $ = (id) => document.getElementById(id);
+
+        async function loadModel() {
+            if (model) return true;
+            $("loader").style.display = "block";
+            try {
+                model = await tmPose.load(URL_MODEL + "model.json", URL_MODEL + "metadata.json");
+                maxPredictions = model.getTotalClasses();
+                $("loader").style.display = "none";
+                return true;
+            } catch (error) {
+                $("loader").style.display = "none";
+                console.error("Lỗi Model:", error);
+                return false;
+            }
+        }
+
+        async function initWebcam() {
+            if (!await loadModel()) return;
+            if (webcam && isCamRunning) await webcam.stop();
+
+            const size = 500; 
+            const flip = facingMode === "user"; 
+            
+            try {
+                webcam = new tmPose.Webcam(size, size, flip);
+                await webcam.setup({ facingMode: facingMode });
+                await webcam.play();
+                isCamRunning = true;
+                
+                setupCanvas(size, size);
+                updateUI(true);
+                window.requestAnimationFrame(loop);
+                setupLabels();
+            } catch (e) { console.error("Lỗi Cam:", e); }
+        }
+
+        async function loop() {
+            if (isCamRunning) {
+                webcam.update();
+                await predict(webcam.canvas);
+                window.requestAnimationFrame(loop);
+            }
+        }
+
+        async function handleImage(input) {
+            if (!input.files[0]) return;
+            await stopWebcam(); 
+            if (!await loadModel()) return;
+
+            const img = new Image();
+            img.src = window.URL.createObjectURL(input.files[0]);
+            img.onload = async () => {
+                setupCanvas(img.width, img.height);
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                setupLabels();
+                updateUI(true);
+                $("b-stop").style.display = "none";
+                $("b-sw").style.display = "none";
+                await predict(canvas);
+            }
+        }
+
+        async function predict(inputElement) {
+            const { pose, posenetOutput } = await model.estimatePose(inputElement);
+            const prediction = await model.predict(posenetOutput);
+
+            const container = $("label-container");
+            if (container.childNodes.length === 0) setupLabels();
+
+            for (let i = 0; i < maxPredictions; i++) {
+                const percent = (prediction[i].probability * 100).toFixed(0) + "%";
+                const className = prediction[i].className;
+                container.childNodes[i].innerHTML = `<div class="res"><span>${className}</span><b>${percent}</b></div>`;
+            }
+
+            if (inputElement !== canvas) ctx.drawImage(inputElement, 0, 0, canvas.width, canvas.height);
+            if (pose) {
+                tmPose.drawKeypoints(pose.keypoints, 0.5, ctx);
+                tmPose.drawSkeleton(pose.keypoints, 0.5, ctx);
+            }
+        }
+
+        function setupCanvas(w, h) {
+            const canvas = $("canvas");
+            canvas.width = w; canvas.height = h;
+            ctx = canvas.getContext("2d");
+            canvas.style.display = "block";
+            $("holder").style.display = "none";
+        }
+
+        function setupLabels() {
+            const container = $("label-container");
+            container.innerHTML = "";
+            for (let i = 0; i < maxPredictions; i++) container.appendChild(document.createElement("div"));
+        }
+
+        function updateUI(isLive) {
+            $("b-start").style.display = isLive ? "none" : "flex";
+            $("b-stop").style.display = isLive ? "flex" : "none";
+            $("b-sw").style.display = isLive ? "flex" : "none";
+        }
+
+        async function stopWebcam() {
+            if (webcam && isCamRunning) { await webcam.stop(); isCamRunning = false; }
+            updateUI(false);
+            $("canvas").style.display = "none";
+            $("holder").style.display = "flex";
+            $("label-container").innerHTML = "";
+        }
+
+        async function switchCamera() {
+            if (!isCamRunning) return;
+            facingMode = facingMode === "user" ? "environment" : "user";
+            await initWebcam();
+        }
+    </script>
+</body>
+</html>
