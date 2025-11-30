@@ -111,16 +111,20 @@
             } catch (e) { console.error("Lỗi Cam:", e); }
         }
 
-        async function loop() {
-            if (isCamRunning) {
-                 if (timestamp - lastPredictTime >= 2000) {
-                        lastPredictTime = timestamp;
-                         webcam.update();
-                        await predict(webcam.canvas);
+async function loop() {
+    if (isCamRunning) {
+        webcam.update();
+
+        const now = performance.now();
+        if (now - lastPredictTime >= 2000) { // 2 giây
+            lastPredictTime = now;
+            await predict(webcam.canvas);
         }
-                window.requestAnimationFrame(loop);
-            }
-        }
+
+        window.requestAnimationFrame(loop);
+    }
+}
+
 
         async function handleImage(input) {
             if (!input.files[0]) return;
@@ -197,4 +201,5 @@
 </body>
 
 </html>
+
 
