@@ -69,7 +69,7 @@
 
     <script>
         const URL_MODEL = "./my_model/"; 
-        let lastPredictTime = 0;
+        let lastShowTime = 0;
         let model, webcam, ctx, maxPredictions;
         let isCamRunning = false;
         let facingMode = "user"; 
@@ -114,16 +114,11 @@
 async function loop() {
     if (isCamRunning) {
         webcam.update();
-
-        const now = performance.now();
-        if (now - lastPredictTime >= 2000) { // 2 giây
-            lastPredictTime = now;
-            await predict(webcam.canvas);
-        }
-
+        await predict(webcam.canvas);
         window.requestAnimationFrame(loop);
     }
 }
+
 
 
         async function handleImage(input) {
@@ -151,11 +146,18 @@ async function loop() {
             const container = $("label-container");
             if (container.childNodes.length === 0) setupLabels();
 
-            for (let i = 0; i < maxPredictions; i++) {
-                const percent = (prediction[i].probability * 100).toFixed(0) + "%";
-                const className = prediction[i].className;
-                container.childNodes[i].innerHTML = `<div class="res"><span>${className}</span><b>${percent}</b></div>`;
-            }
+const now = performance.now();
+if (now - lastShowTime >= 2000) {   // chỉ cập nhật UI mỗi 2s
+    lastShowTime = now;
+
+    for (let i = 0; i < maxPredictions; i++) {
+        const percent = (prediction[i].probability * 100).toFixed(0) + "%";
+        const className = prediction[i].className;
+        container.childNodes[i].innerHTML =
+            `<div class="res"><span>${className}</span><b>${percent}</b></div>`;
+    }
+}
+
 
             if (inputElement !== canvas) ctx.drawImage(inputElement, 0, 0, canvas.width, canvas.height);
             if (pose) {
@@ -201,5 +203,6 @@ async function loop() {
 </body>
 
 </html>
+
 
 
